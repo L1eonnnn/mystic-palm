@@ -1,7 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 export async function analyzePalm(base64Image: string, mimeType: string, focus: string = '全部'): Promise<string> {
   try {
     const prompt = `
@@ -59,24 +55,47 @@ export async function analyzePalm(base64Image: string, mimeType: string, focus: 
       \`\`\`
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: base64Image,
-              mimeType: mimeType,
-            },
-          },
-          {
-            text: prompt,
-          },
-        ],
+    const apiKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
+    if (!apiKey) {
+      throw new Error("请配置 VITE_DASHSCOPE_API_KEY 环境变量");
+    }
+
+    const response = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
       },
+      body: JSON.stringify({
+        model: "qwen-vl-max",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: prompt
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${mimeType};base64,${base64Image}`
+                }
+              }
+            ]
+          }
+        ]
+      })
     });
 
-    let fullText = response.text || "";
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error("DashScope API Error:", errData);
+        throw new Error("API 请求失败: " + (errData.error?.message || response.statusText));
+    }
+
+    const data = await response.json();
+    let fullText = data.choices?.[0]?.message?.content || "";
 
     if (!fullText) {
       fullText = "神秘的能量目前被云雾遮蔽。请换一张更清晰的图片再试一次。";
