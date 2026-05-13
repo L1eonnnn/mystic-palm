@@ -114,7 +114,6 @@ export default function App() {
             <ReadingResult 
               key="result" 
               reading={reading} 
-              imageSrc={`data:${currentImage.mimeType};base64,${currentImage.base64}`}
               onReset={handleReset} 
               onDeepDive={handleDeepDive} 
             />
