@@ -3,12 +3,13 @@ import { Upload, Camera, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ImageUploaderProps {
-  onImageSelected: (base64: string, mimeType: string) => void;
+  onImageSelected: (base64: string, mimeType: string, modelId: string) => void;
 }
 
 export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState('qwen');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -35,7 +36,7 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
       // Extract base64 data and mime type
       const match = result.match(/^data:(image\/[a-zA-Z+.-]+);base64,(.*)$/);
       if (match) {
-        onImageSelected(match[2], match[1]);
+        onImageSelected(match[2], match[1], selectedModel);
       }
     };
     reader.readAsDataURL(file);
@@ -65,6 +66,26 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
 
   return (
     <div className="w-full max-w-md mx-auto">
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gold-400 opacity-80 mb-2">选择灵界感应模型</label>
+        <div className="relative">
+          <select 
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
+          >
+            <option value="qwen">通义千问 (Qwen-VL-Max)</option>
+            <option value="doubao">豆包 (Doubao-Vision-Pro)</option>
+            <option value="zhipu">智谱清言 (GLM-4V)</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
       {!preview ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}

@@ -13,13 +13,15 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [currentImage, setCurrentImage] = useState<{base64: string, mimeType: string} | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string>('qwen');
 
-  const handleImageSelected = async (base64: string, mimeType: string) => {
+  const handleImageSelected = async (base64: string, mimeType: string, modelId: string) => {
     setCurrentImage({ base64, mimeType });
+    setSelectedModelId(modelId);
     setAppState('loading');
     setError(null);
     try {
-      const result = await analyzePalm(base64, mimeType);
+      const result = await analyzePalm(base64, mimeType, '全部', modelId);
       setReading(result);
       setAppState('result');
     } catch (err: any) {
@@ -40,7 +42,7 @@ export default function App() {
     setAppState('loading');
     setError(null);
     try {
-      const result = await analyzePalm(currentImage.base64, currentImage.mimeType, focus);
+      const result = await analyzePalm(currentImage.base64, currentImage.mimeType, focus, selectedModelId);
       setReading(result);
       setAppState('result');
     } catch (err: any) {

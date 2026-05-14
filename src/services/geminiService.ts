@@ -1,4 +1,4 @@
-export async function analyzePalm(base64Image: string, mimeType: string, focus: string = '全部'): Promise<string> {
+export async function analyzePalm(base64Image: string, mimeType: string, focus: string = '全部', modelId: string = 'qwen'): Promise<string> {
   try {
     const prompt = `
       You are a wise, mystical, and experienced palm reader. 
@@ -30,19 +30,37 @@ export async function analyzePalm(base64Image: string, mimeType: string, focus: 
       ${focus !== '全部' ? `\n**特别注意**：用户希望重点关注【${focus}】。请在本次解读中，将大部分篇幅用于极其详细、深入地剖析【${focus}】，提供更多的细节、预测和针对性建议。其他线条的解读可以适当简略。` : ''}
     `;
 
-    const apiKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("请配置 VITE_DASHSCOPE_API_KEY 环境变量");
+    let apiUrl = "";
+    let apiKey = "";
+    let modelName = "";
+
+    if (modelId === 'qwen') {
+        apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+        apiKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
+        modelName = "qwen-vl-max";
+        if (!apiKey) throw new Error("请配置 VITE_DASHSCOPE_API_KEY 环境变量");
+    } else if (modelId === 'doubao') {
+        apiUrl = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+        apiKey = import.meta.env.VITE_DOUBAO_API_KEY;
+        modelName = import.meta.env.VITE_DOUBAO_MODEL_EP;
+        if (!apiKey || !modelName) throw new Error("请配置 VITE_DOUBAO_API_KEY 和 VITE_DOUBAO_MODEL_EP 环境变量（接入点ID）");
+    } else if (modelId === 'zhipu') {
+        apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+        apiKey = import.meta.env.VITE_ZHIPU_API_KEY;
+        modelName = "glm-4v";
+        if (!apiKey) throw new Error("请配置 VITE_ZHIPU_API_KEY 环境变量");
+    } else {
+        throw new Error("未知的 AI 模型");
     }
 
-    const response = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "qwen-vl-max",
+        model: modelName,
         messages: [
           {
             role: "user",
@@ -65,7 +83,7 @@ export async function analyzePalm(base64Image: string, mimeType: string, focus: 
 
     if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        console.error("DashScope API Error:", errData);
+        console.error("API Error:", errData);
         throw new Error("API 请求失败: " + (errData.error?.message || response.statusText));
     }
 
