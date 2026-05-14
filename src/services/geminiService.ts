@@ -39,11 +39,12 @@ export async function analyzePalm(base64Image: string, mimeType: string, focus: 
         apiKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
         modelName = "qwen-vl-max";
         if (!apiKey) throw new Error("请配置 VITE_DASHSCOPE_API_KEY 环境变量");
-    } else if (modelId === 'doubao') {
-        apiUrl = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-        apiKey = import.meta.env.VITE_DOUBAO_API_KEY;
-        modelName = import.meta.env.VITE_DOUBAO_MODEL_EP;
-        if (!apiKey || !modelName) throw new Error("请配置 VITE_DOUBAO_API_KEY 和 VITE_DOUBAO_MODEL_EP 环境变量（接入点ID）");
+    } else if (modelId === 'deepseek') {
+        apiUrl = "https://api.deepseek.com/chat/completions";
+        apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
+        // DeepSeek's official API for chat. Note: if they release a vision model, string might change.
+        modelName = "deepseek-chat"; 
+        if (!apiKey) throw new Error("请配置 VITE_DEEPSEEK_API_KEY 环境变量");
     } else if (modelId === 'zhipu') {
         apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
         apiKey = import.meta.env.VITE_ZHIPU_API_KEY;

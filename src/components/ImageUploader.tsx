@@ -75,7 +75,7 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
             className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
           >
             <option value="qwen">通义千问 (Qwen-VL-Max)</option>
-            <option value="doubao">豆包 (Doubao-Vision-Pro)</option>
+            <option value="deepseek">DeepSeek</option>
             <option value="zhipu">智谱清言 (GLM-4V)</option>
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
