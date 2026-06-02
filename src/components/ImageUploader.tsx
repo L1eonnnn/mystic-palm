@@ -1,15 +1,18 @@
 import React, { useRef, useState } from 'react';
 import { Upload, Camera, X } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import SmartCamera from './SmartCamera';
 
 interface ImageUploaderProps {
-  onImageSelected: (base64: string, mimeType: string, modelId: string) => void;
+  onImageSelected: (base64: string, mimeType: string, modelId: string, handType: string) => void;
 }
 
 export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState('qwen');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.5-flash');
+  const [handType, setHandType] = useState('left');
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -36,7 +39,7 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
       // Extract base64 data and mime type
       const match = result.match(/^data:(image\/[a-zA-Z+.-]+);base64,(.*)$/);
       if (match) {
-        onImageSelected(match[2], match[1], selectedModel);
+        onImageSelected(match[2], match[1], selectedModel, handType);
       }
     };
     reader.readAsDataURL(file);
@@ -66,22 +69,39 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gold-400 opacity-80 mb-2">选择灵界感应模型</label>
-        <div className="relative">
-          <select 
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
-          >
-            <option value="qwen">通义千问 (Qwen-VL-Max)</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="zhipu">智谱清言 (GLM-4V)</option>
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-              <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-            </svg>
+      <div className="flex gap-4 mb-4">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gold-400 opacity-80 mb-2">选择模型</label>
+          <div className="relative">
+            <select 
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
+            >
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o-mini</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gold-400 opacity-80 mb-2">手部类型</label>
+          <div className="relative">
+            <select 
+              value={handType}
+              onChange={(e) => setHandType(e.target.value)}
+              className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
+            >
+              <option value="left">左手 (先天命格)</option>
+              <option value="right">右手 (后天运势)</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+            </div>
           </div>
         </div>
       </div>
@@ -114,20 +134,15 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
                 className="flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Upload className="w-4 h-4" />
-                上传
+                相册
               </button>
               
               <button
-                onClick={() => {
-                  if (fileInputRef.current) {
-                    fileInputRef.current.capture = 'environment';
-                    fileInputRef.current.click();
-                  }
-                }}
+                onClick={() => setIsCameraOpen(true)}
                 className="flex-1 py-3 px-4 bg-gold-500 hover:bg-gold-400 text-mystic-900 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Camera className="w-4 h-4" />
-                拍照
+                智能拍照
               </button>
             </div>
           </div>
@@ -168,6 +183,19 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
           </div>
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {isCameraOpen && (
+          <SmartCamera 
+            onClose={() => setIsCameraOpen(false)}
+            onCapture={(base64, mimeType) => {
+              setPreview(`data:${mimeType};base64,${base64}`);
+              setIsCameraOpen(false);
+              onImageSelected(base64, mimeType, selectedModel, handType);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

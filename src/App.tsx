@@ -7,23 +7,40 @@ import FeedbackModal from './components/FeedbackModal';
 import MysticLoading from './components/MysticLoading';
 import { analyzePalm } from './services/geminiService';
 
+import HistoryModal from './components/HistoryModal';
+
 export default function App() {
   const [appState, setAppState] = useState<'idle' | 'loading' | 'result'>('idle');
   const [reading, setReading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [currentImage, setCurrentImage] = useState<{base64: string, mimeType: string} | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<string>('qwen');
+  const [selectedModelId, setSelectedModelId] = useState<string>('gemini-3.5-flash');
+  const [selectedHandType, setSelectedHandType] = useState<string>('left');
 
-  const handleImageSelected = async (base64: string, mimeType: string, modelId: string) => {
+  const handleImageSelected = async (base64: string, mimeType: string, modelId: string, handType: string) => {
     setCurrentImage({ base64, mimeType });
     setSelectedModelId(modelId);
+    setSelectedHandType(handType);
     setAppState('loading');
     setError(null);
     try {
-      const result = await analyzePalm(base64, mimeType, '全部', modelId);
+      const result = await analyzePalm(base64, mimeType, '全部', modelId, handType);
       setReading(result);
       setAppState('result');
+      
+      // Save to history
+      const historyItem = {
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        handType,
+        modelId,
+        reading: result,
+        imageSrc: `data:${mimeType};base64,${base64}`
+      };
+      const existingHistory = JSON.parse(localStorage.getItem('palm_history') || '[]');
+      localStorage.setItem('palm_history', JSON.stringify([historyItem, ...existingHistory]));
     } catch (err: any) {
       setError(err.message || "宇宙连接中断，请重试。");
       setAppState('idle');
@@ -42,13 +59,25 @@ export default function App() {
     setAppState('loading');
     setError(null);
     try {
-      const result = await analyzePalm(currentImage.base64, currentImage.mimeType, focus, selectedModelId);
+      const result = await analyzePalm(currentImage.base64, currentImage.mimeType, focus, selectedModelId, selectedHandType);
       setReading(result);
       setAppState('result');
     } catch (err: any) {
       setError(err.message || "宇宙连接中断，请重试。");
       setAppState('idle');
     }
+  };
+
+  const handleSelectHistoryRecord = (record: any) => {
+    // Extract base64 and mime
+    const match = record.imageSrc.match(/^data:(image\/[a-zA-Z+.-]+);base64,(.*)$/);
+    if (match) {
+        setCurrentImage({ base64: match[2], mimeType: match[1] });
+    }
+    setReading(record.reading);
+    setSelectedHandType(record.handType);
+    setSelectedModelId(record.modelId);
+    setAppState('result');
   };
 
   return (
@@ -58,6 +87,15 @@ export default function App() {
         <div className="absolute top-[10%] left-[20%] w-96 h-96 bg-mystic-800 rounded-full mix-blend-screen filter blur-[100px] opacity-50 animate-pulse" />
         <div className="absolute bottom-[20%] right-[10%] w-80 h-80 bg-mystic-700 rounded-full mix-blend-screen filter blur-[80px] opacity-60" />
         <div className="absolute top-[40%] right-[30%] w-64 h-64 bg-gold-500/10 rounded-full mix-blend-screen filter blur-[60px] opacity-40" />
+      </div>
+
+      <div className="absolute top-4 right-4 z-20">
+         <button 
+           onClick={() => setIsHistoryModalOpen(true)}
+           className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-gold-500/30 rounded-full text-sm font-medium transition-colors shadow-lg backdrop-blur"
+         >
+           我的档案
+         </button>
       </div>
 
       <header className="z-10 text-center mb-12 mt-8">
@@ -116,6 +154,8 @@ export default function App() {
             <ReadingResult 
               key="result" 
               reading={reading} 
+              handType={selectedHandType as 'left' | 'right'}
+              imageSrc={`data:${currentImage.mimeType};base64,${currentImage.base64}`}
               onReset={handleReset} 
               onDeepDive={handleDeepDive} 
             />
@@ -137,6 +177,12 @@ export default function App() {
       <FeedbackModal 
         isOpen={isFeedbackModalOpen} 
         onClose={() => setIsFeedbackModalOpen(false)} 
+      />
+
+      <HistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        onSelectRecord={handleSelectHistoryRecord}
       />
     </div>
   );

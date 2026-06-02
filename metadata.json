@@ -1,5 +1,6 @@
 {
   "name": "神秘手相占卜",
   "description": "上传您的手相照片，让AI为您进行神秘的手相解读。",
-  "requestFramePermissions": ["camera"]
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

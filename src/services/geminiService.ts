@@ -1,103 +1,38 @@
-export async function analyzePalm(base64Image: string, mimeType: string, focus: string = '全部', modelId: string = 'qwen'): Promise<string> {
+/**
+ * Service to analyze palm image using our backend Express API.
+ * Keeps API keys and model inference securely server-side.
+ */
+export async function analyzePalm(
+  base64Image: string, 
+  mimeType: string, 
+  focus: string = '全部', 
+  modelId: string = 'gemini-3.5-flash', 
+  handType: string = 'left'
+): Promise<string> {
   try {
-    const prompt = `
-      You are a wise, mystical, and experienced palm reader. 
-      Analyze this image of a palm and provide a detailed, positive, and insightful palmistry reading.
-      Please reply in Simplified Chinese.
-      
-      Please structure your reading with the following sections using Markdown headings (H2):
-      ## 整体能量
-      (Describe the general shape, energy, and overall impression of the hand)
-      
-      ## 生命线
-      (Analyze the life line: vitality, major life changes, energy levels)
-      
-      ## 感情线
-      (Analyze the heart line: emotional nature, relationships, love)
-      
-      ## 智慧线
-      (Analyze the head line: intellect, thought processes, career focus)
-      
-      ## 事业线（若可见）
-      (Analyze the fate line: destiny, career path, external influences)
-      
-      ## 神秘建议
-      (Provide a short, uplifting piece of advice or fortune based on the reading)
-
-      Keep the tone mystical, encouraging, and respectful. Do not provide medical advice.
-      If you cannot clearly see the lines, provide a general positive reading based on the hand shape and offer mystical advice.
-      
-      ${focus !== '全部' ? `\n**特别注意**：用户希望重点关注【${focus}】。请在本次解读中，将大部分篇幅用于极其详细、深入地剖析【${focus}】，提供更多的细节、预测和针对性建议。其他线条的解读可以适当简略。` : ''}
-    `;
-
-    let apiUrl = "";
-    let apiKey = "";
-    let modelName = "";
-
-    if (modelId === 'qwen') {
-        apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-        apiKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
-        modelName = "qwen-vl-max";
-        if (!apiKey) throw new Error("请配置 VITE_DASHSCOPE_API_KEY 环境变量");
-    } else if (modelId === 'deepseek') {
-        apiUrl = "https://api.deepseek.com/chat/completions";
-        apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
-        // DeepSeek's official API for chat. Note: if they release a vision model, string might change.
-        modelName = "deepseek-chat"; 
-        if (!apiKey) throw new Error("请配置 VITE_DEEPSEEK_API_KEY 环境变量");
-    } else if (modelId === 'zhipu') {
-        apiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-        apiKey = import.meta.env.VITE_ZHIPU_API_KEY;
-        modelName = "glm-4v";
-        if (!apiKey) throw new Error("请配置 VITE_ZHIPU_API_KEY 环境变量");
-    } else {
-        throw new Error("未知的 AI 模型");
-    }
-
-    const response = await fetch(apiUrl, {
+    const response = await fetch("/api/analyze-palm", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: modelName,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: prompt
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${base64Image}`
-                }
-              }
-            ]
-          }
-        ]
+        base64Image,
+        mimeType,
+        focus,
+        modelId,
+        handType
       })
     });
 
     if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.error("API Error:", errData);
-        throw new Error("API 请求失败: " + (errData.error?.message || response.statusText));
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `服务器请求失败 (HTTP ${response.status})`);
     }
 
     const data = await response.json();
-    let fullText = data.choices?.[0]?.message?.content || "";
-
-    if (!fullText) {
-      fullText = "神秘的能量目前被云雾遮蔽。请换一张更清晰的图片再试一次。";
-    }
-
-    return fullText;
-  } catch (error) {
-    console.error("Error analyzing palm:", error);
-    throw new Error("手相解读失败，宇宙连接已中断。");
+    return data.output || "命运之星目前被迷雾笼罩，请再试一次。";
+  } catch (error: any) {
+    console.error("Error in analyzePalm:", error);
+    throw new Error(error.message || "连接神秘星宿失败，请检查网络后重试。");
   }
 }
