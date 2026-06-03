@@ -5,9 +5,11 @@ import SmartCamera from './SmartCamera';
 
 interface ImageUploaderProps {
   onImageSelected: (base64: string, mimeType: string, modelId: string, handType: string) => void;
+  isPlusSubscribed: boolean;
+  onOpenUpgrade: () => void;
 }
 
-export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
+export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpenUpgrade }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState('gemini-3.5-flash');
@@ -75,12 +77,19 @@ export default function ImageUploader({ onImageSelected }: ImageUploaderProps) {
           <div className="relative">
             <select 
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'gpt-4o' && !isPlusSubscribed) {
+                  onOpenUpgrade();
+                  return;
+                }
+                setSelectedModel(val);
+              }}
               className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
             >
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash (免费版)</option>
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o">{isPlusSubscribed ? '👑 GPT-4o (已解锁)' : '🔮 GPT-4o (Plus $6.9 专属)'}</option>
               <option value="gpt-4o-mini">GPT-4o-mini</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">

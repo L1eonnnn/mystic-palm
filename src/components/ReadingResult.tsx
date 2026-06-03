@@ -421,7 +421,7 @@ export default function ReadingResult({ reading, handType, imageSrc, onReset, on
                    const textPoint = line.points[Math.floor(line.points.length / 2)]; // Place text near middle
                    
                    return (
-                     <g key={i}>
+                     <g key={`line-group-${line.name || i}-${i}`}>
                        {/* Glow effect */}
                        <motion.path 
                          initial={{ pathLength: 0, opacity: 0 }} 
@@ -451,7 +451,7 @@ export default function ReadingResult({ reading, handType, imageSrc, onReset, on
                        {isCalibrating && line.points.map((pt: any, idx: number) => {
                          const isDragging = draggingPoint?.lineIndex === i && draggingPoint?.pointIndex === idx;
                          return (
-                           <g key={idx} className="cursor-pointer pointer-events-auto">
+                           <g key={`point-handle-${line.name || i}-${i}-${idx}`} className="cursor-pointer pointer-events-auto">
                              {/* Fat-finger click/touch helper hitbox */}
                              <circle
                                cx={pt.x}
@@ -567,7 +567,7 @@ export default function ReadingResult({ reading, handType, imageSrc, onReset, on
             
             return (
               <motion.div 
-                key={index}
+                key={`reading-sec-${index}-${section.substring(0, 10).trim()}`}
                 initial={false}
                 animate={{ 
                   opacity: isDimmed ? 0.3 : 1,

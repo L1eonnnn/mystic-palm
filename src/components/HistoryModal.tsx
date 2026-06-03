@@ -15,23 +15,27 @@ interface HistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectRecord: (record: ReadingHistory) => void;
+  userEmail: string | null;
 }
 
-export default function HistoryModal({ isOpen, onClose, onSelectRecord }: HistoryModalProps) {
+export default function HistoryModal({ isOpen, onClose, onSelectRecord, userEmail }: HistoryModalProps) {
   const [history, setHistory] = useState<ReadingHistory[]>([]);
+  const storageKey = userEmail ? `palm_history_${userEmail}` : 'palm_history';
 
   useEffect(() => {
     if (isOpen) {
-      const saved = localStorage.getItem('palm_history');
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         setHistory(JSON.parse(saved));
+      } else {
+        setHistory([]);
       }
     }
-  }, [isOpen]);
+  }, [isOpen, storageKey]);
 
   const clearHistory = () => {
     if (window.confirm("确定要清空命运档案吗？")) {
-      localStorage.removeItem('palm_history');
+      localStorage.removeItem(storageKey);
       setHistory([]);
     }
   };
@@ -69,11 +73,11 @@ export default function HistoryModal({ isOpen, onClose, onSelectRecord }: Histor
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {history.map((record) => {
+                  {history.map((record, index) => {
                     const date = new Date(record.date);
                     return (
                       <motion.div
-                        key={record.id}
+                        key={`history-record-${record.id}-${index}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         onClick={() => {

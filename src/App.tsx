@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Moon, Star, MessageSquare } from 'lucide-react';
+import { Sparkles, Moon, Star, MessageSquare, LogIn } from 'lucide-react';
 import ImageUploader from './components/ImageUploader';
 import ReadingResult from './components/ReadingResult';
 import FeedbackModal from './components/FeedbackModal';
@@ -8,6 +8,8 @@ import MysticLoading from './components/MysticLoading';
 import { analyzePalm } from './services/geminiService';
 
 import HistoryModal from './components/HistoryModal';
+import LoginModal from './components/LoginModal';
+import UpgradePage from './components/UpgradePage';
 
 export default function App() {
   const [appState, setAppState] = useState<'idle' | 'loading' | 'result'>('idle');
@@ -15,9 +17,23 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isUpgradePageOpen, setIsUpgradePageOpen] = useState(false);
+  const [isPlusSubscribed, setIsPlusSubscribed] = useState<boolean>(() => localStorage.getItem('isPlusSubscribed') === 'true');
+  const [userEmail, setUserEmail] = useState<string | null>(() => localStorage.getItem('currentUserEmail'));
   const [currentImage, setCurrentImage] = useState<{base64: string, mimeType: string} | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string>('gemini-3.5-flash');
   const [selectedHandType, setSelectedHandType] = useState<string>('left');
+
+  const handleLoginSuccess = (email: string) => {
+    setUserEmail(email);
+    localStorage.setItem('currentUserEmail', email);
+  };
+
+  const handleLogout = () => {
+    setUserEmail(null);
+    localStorage.removeItem('currentUserEmail');
+  };
 
   const handleImageSelected = async (base64: string, mimeType: string, modelId: string, handType: string) => {
     setCurrentImage({ base64, mimeType });
@@ -30,7 +46,7 @@ export default function App() {
       setReading(result);
       setAppState('result');
       
-      // Save to history
+      // Save to history (dependent on current login status)
       const historyItem = {
         id: Date.now().toString(),
         date: new Date().toISOString(),
@@ -39,8 +55,9 @@ export default function App() {
         reading: result,
         imageSrc: `data:${mimeType};base64,${base64}`
       };
-      const existingHistory = JSON.parse(localStorage.getItem('palm_history') || '[]');
-      localStorage.setItem('palm_history', JSON.stringify([historyItem, ...existingHistory]));
+      const storageKey = userEmail ? `palm_history_${userEmail}` : 'palm_history';
+      const existingHistory = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      localStorage.setItem(storageKey, JSON.stringify([historyItem, ...existingHistory]));
     } catch (err: any) {
       setError(err.message || "宇宙连接中断，请重试。");
       setAppState('idle');
@@ -89,13 +106,56 @@ export default function App() {
         <div className="absolute top-[40%] right-[30%] w-64 h-64 bg-gold-500/10 rounded-full mix-blend-screen filter blur-[60px] opacity-40" />
       </div>
 
-      <div className="absolute top-4 right-4 z-20">
-         <button 
-           onClick={() => setIsHistoryModalOpen(true)}
-           className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-gold-500/30 rounded-full text-sm font-medium transition-colors shadow-lg backdrop-blur"
-         >
-           我的档案
-         </button>
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-3">
+        {isPlusSubscribed ? (
+          <button
+            onClick={() => setIsUpgradePageOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 border border-indigo-400 text-white rounded-full text-xs font-bold transition-all shadow-lg backdrop-blur flex items-center gap-1.5 cursor-pointer animate-pulse"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300 fill-current animate-spin" />
+            <span>Plus 尊享版</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsUpgradePageOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500/25 to-yellow-600/15 hover:from-amber-500/35 hover:to-yellow-600/30 border border-amber-500/40 text-gold-400 rounded-full text-xs font-bold transition-all shadow-lg backdrop-blur flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>👑 升级 Plus ($6.9)</span>
+          </button>
+        )}
+
+        {userEmail ? (
+          <div className="flex items-center gap-2 bg-black/40 p-1.5 pl-3 pr-2 border border-gold-500/30 rounded-full text-xs font-medium backdrop-blur shadow-lg">
+            <span className="text-gold-200">{userEmail.length > 15 ? `${userEmail.substring(0, 12)}...` : userEmail}</span>
+            <button
+              onClick={handleLogout}
+              className="px-2 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-full transition-colors text-[10px] uppercase font-bold cursor-pointer hover:text-white"
+            >
+              退出
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setIsLoginModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-gold-500/25 to-gold-400/10 hover:from-gold-500/45 border border-gold-500/40 hover:border-gold-500 rounded-full text-sm font-medium transition-all shadow-lg backdrop-blur text-white flex items-center gap-1.5 cursor-pointer"
+          >
+            <LogIn className="w-4 h-4 text-gold-400" />
+            <span>启示登录</span>
+          </button>
+        )}
+        
+        <button 
+          onClick={() => {
+            if (!userEmail) {
+              setIsLoginModalOpen(true);
+            } else {
+              setIsHistoryModalOpen(true);
+            }
+          }}
+          className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-gold-500/30 rounded-full text-sm font-medium transition-colors shadow-lg backdrop-blur text-white cursor-pointer"
+        >
+          我的档案
+        </button>
       </div>
 
       <header className="z-10 text-center mb-12 mt-8">
@@ -132,7 +192,11 @@ export default function App() {
               transition={{ duration: 0.5 }}
               className="w-full"
             >
-              <ImageUploader onImageSelected={handleImageSelected} />
+              <ImageUploader 
+                onImageSelected={handleImageSelected} 
+                isPlusSubscribed={isPlusSubscribed}
+                onOpenUpgrade={() => setIsUpgradePageOpen(true)}
+              />
               
               {error && (
                 <motion.div
@@ -183,6 +247,23 @@ export default function App() {
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
         onSelectRecord={handleSelectHistoryRecord}
+        userEmail={userEmail}
+      />
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
+      <UpgradePage
+        isOpen={isUpgradePageOpen}
+        onClose={() => setIsUpgradePageOpen(false)}
+        isUnlocked={isPlusSubscribed}
+        onUpgradeSuccess={() => {
+          setIsPlusSubscribed(true);
+          localStorage.setItem('isPlusSubscribed', 'true');
+        }}
       />
     </div>
   );
