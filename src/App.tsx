@@ -22,7 +22,7 @@ export default function App() {
   const [isPlusSubscribed, setIsPlusSubscribed] = useState<boolean>(() => localStorage.getItem('isPlusSubscribed') === 'true');
   const [userEmail, setUserEmail] = useState<string | null>(() => localStorage.getItem('currentUserEmail'));
   const [currentImage, setCurrentImage] = useState<{base64: string, mimeType: string} | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<string>('gemini-3.5-flash');
+  const [selectedModelId, setSelectedModelId] = useState<string>('google/gemini-2.5-flash');
   const [selectedHandType, setSelectedHandType] = useState<string>('left');
 
   const handleLoginSuccess = (email: string) => {
@@ -196,6 +196,8 @@ export default function App() {
                 onImageSelected={handleImageSelected} 
                 isPlusSubscribed={isPlusSubscribed}
                 onOpenUpgrade={() => setIsUpgradePageOpen(true)}
+                isLoggedIn={!!userEmail}
+                onOpenLogin={() => setIsLoginModalOpen(true)}
               />
               
               {error && (

@@ -411,47 +411,46 @@ export default function ReadingResult({ reading, handType, imageSrc, onReset, on
                 viewBox="0 0 100 100" 
                 preserveAspectRatio="none"
               >
-                {displayLines.map((line: any, i: number) => {
-                   if (!line.points || line.points.length < 2) return null;
-                   // Filter out this line if it's not active in deep dive/filters
-                   const isVisible = activeFilter === '全部' || activeFilter === line.name;
-                   if (!isVisible) return null;
+                {displayLines
+                  .map((line: any, i: number) => ({ line, originalIndex: i }))
+                  .filter(({ line }) => line.points && line.points.length >= 2)
+                  .filter(({ line }) => activeFilter === '全部' || activeFilter === line.name)
+                  .map(({ line, originalIndex: i }) => {
+                    const pathD = createSmoothCurve(line.points);
+                    const textPoint = line.points[Math.floor(line.points.length / 2)]; // Place text near middle
+                    
+                    return (
+                      <g key={`line-group-${i}`}>
+                        {/* Glow effect */}
+                        <motion.path 
+                          initial={{ pathLength: 0, opacity: 0 }} 
+                          animate={{ pathLength: 1, opacity: 0.4 }} 
+                          transition={{ duration: 2.5, delay: i * 0.5 + 0.2, ease: "easeInOut" }}
+                          d={pathD} fill="none" stroke={line.color} strokeWidth={isCalibrating ? "2" : "3"} strokeLinecap="round" strokeLinejoin="round" 
+                          style={{ filter: 'blur(3px)' }}
+                        />
+                        {/* Core line */}
+                        <motion.path 
+                          initial={{ pathLength: 0 }} 
+                          animate={{ pathLength: 1 }} 
+                          transition={{ duration: 2.5, delay: i * 0.5, ease: "easeInOut" }}
+                          d={pathD} fill="none" stroke={line.color} strokeWidth={isCalibrating ? "1.6" : "1.2"} strokeLinecap="round" strokeLinejoin="round" 
+                        />
+                        {/* End points */}
+                        <motion.circle initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.5 + 2.5 }} cx={line.points[0].x} cy={line.points[0].y} r="1" fill={line.color} />
+                        <motion.circle initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.5 + 2.5 }} cx={line.points[line.points.length-1].x} cy={line.points[line.points.length-1].y} r="1" fill={line.color} />
+                        
+                        {/* Label overlaying on midway point */}
+                        <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.5 + 2 }}>
+                          <rect x={textPoint.x - 2} y={textPoint.y - 4.5} width="16" height="5" fill="rgba(15, 12, 41, 0.7)" rx="1" />
+                          <text x={textPoint.x} y={textPoint.y - 1} fill={line.color} fontSize="3" fontWeight="bold" style={{ textShadow: "0px 1px 2px rgba(0,0,0,0.9)" }}>{line.name}</text>
+                        </motion.g>
 
-                   const pathD = createSmoothCurve(line.points);
-                   const textPoint = line.points[Math.floor(line.points.length / 2)]; // Place text near middle
-                   
-                   return (
-                     <g key={`line-group-${line.name || i}-${i}`}>
-                       {/* Glow effect */}
-                       <motion.path 
-                         initial={{ pathLength: 0, opacity: 0 }} 
-                         animate={{ pathLength: 1, opacity: 0.4 }} 
-                         transition={{ duration: 2.5, delay: i * 0.5 + 0.2, ease: "easeInOut" }}
-                         d={pathD} fill="none" stroke={line.color} strokeWidth={isCalibrating ? "2" : "3"} strokeLinecap="round" strokeLinejoin="round" 
-                         style={{ filter: 'blur(3px)' }}
-                       />
-                       {/* Core line */}
-                       <motion.path 
-                         initial={{ pathLength: 0 }} 
-                         animate={{ pathLength: 1 }} 
-                         transition={{ duration: 2.5, delay: i * 0.5, ease: "easeInOut" }}
-                         d={pathD} fill="none" stroke={line.color} strokeWidth={isCalibrating ? "1.6" : "1.2"} strokeLinecap="round" strokeLinejoin="round" 
-                       />
-                       {/* End points */}
-                       <motion.circle initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.5 + 2.5 }} cx={line.points[0].x} cy={line.points[0].y} r="1" fill={line.color} />
-                       <motion.circle initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.5 + 2.5 }} cx={line.points[line.points.length-1].x} cy={line.points[line.points.length-1].y} r="1" fill={line.color} />
-                       
-                       {/* Label overlaying on midway point */}
-                       <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.5 + 2 }}>
-                         <rect x={textPoint.x - 2} y={textPoint.y - 4.5} width="16" height="5" fill="rgba(15, 12, 41, 0.7)" rx="1" />
-                         <text x={textPoint.x} y={textPoint.y - 1} fill={line.color} fontSize="3" fontWeight="bold" style={{ textShadow: "0px 1px 2px rgba(0,0,0,0.9)" }}>{line.name}</text>
-                       </motion.g>
-
-                       {/* Interactive drag handlers for manual alignment calibration */}
-                       {isCalibrating && line.points.map((pt: any, idx: number) => {
-                         const isDragging = draggingPoint?.lineIndex === i && draggingPoint?.pointIndex === idx;
-                         return (
-                           <g key={`point-handle-${line.name || i}-${i}-${idx}`} className="cursor-pointer pointer-events-auto">
+                        {/* Interactive drag handlers for manual alignment calibration */}
+                        {isCalibrating && line.points.map((pt: any, idx: number) => {
+                          const isDragging = draggingPoint?.lineIndex === i && draggingPoint?.pointIndex === idx;
+                          return (
+                            <g key={`point-handle-${i}-${idx}`} className="cursor-pointer pointer-events-auto">
                              {/* Fat-finger click/touch helper hitbox */}
                              <circle
                                cx={pt.x}
@@ -551,24 +550,25 @@ export default function ReadingResult({ reading, handType, imageSrc, onReset, on
         </div>
         
         <div className="space-y-6">
-          {sections.map((section, index) => {
-            if (!section.trim()) return null;
-            
-            const isMatch = activeFilter !== '全部' && section.includes(activeFilter);
-            const isDimmed = activeFilter !== '全部' && !isMatch;
+          {sections
+            .map((section, index) => ({ section, index }))
+            .filter(({ section }) => section.trim().length > 0)
+            .map(({ section, index }) => {
+              const isMatch = activeFilter !== '全部' && section.includes(activeFilter);
+              const isDimmed = activeFilter !== '全部' && !isMatch;
 
-            let Icon = Star;
-            if (section.includes('生命')) Icon = Leaf;
-            else if (section.includes('感情') || section.includes('婚姻')) Icon = Heart;
-            else if (section.includes('智慧')) Icon = Brain;
-            else if (section.includes('事业')) Icon = TrendingUp;
-            else if (section.includes('能量')) Icon = Sparkles;
-            else if (section.includes('建议') || section.includes('启示')) Icon = Moon;
-            
-            return (
-              <motion.div 
-                key={`reading-sec-${index}-${section.substring(0, 10).trim()}`}
-                initial={false}
+              let Icon = Star;
+              if (section.includes('生命')) Icon = Leaf;
+              else if (section.includes('感情') || section.includes('婚姻')) Icon = Heart;
+              else if (section.includes('智慧')) Icon = Brain;
+              else if (section.includes('事业')) Icon = TrendingUp;
+              else if (section.includes('能量')) Icon = Sparkles;
+              else if (section.includes('建议') || section.includes('启示')) Icon = Moon;
+              
+              return (
+                <motion.div 
+                  key={`reading-sec-${index}`}
+                  initial={false}
                 animate={{ 
                   opacity: isDimmed ? 0.3 : 1,
                   scale: isMatch ? 1.02 : 1,

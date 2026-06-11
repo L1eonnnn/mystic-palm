@@ -1,31 +1,29 @@
-import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 
-// Lazy init of Gemini Client
-let aiInstance: GoogleGenAI | null = null;
-function getGeminiClient(apiKey: string): GoogleGenAI {
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({
+// Lazy init of OpenRouter Client
+let openrouterInstance: OpenAI | null = null;
+function getOpenRouterClient(apiKey: string): OpenAI {
+  if (!openrouterInstance) {
+    openrouterInstance = new OpenAI({
       apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": "https://ai.studio",
+        "X-Title": "MysticPalm AI",
       }
     });
   }
-  return aiInstance;
+  return openrouterInstance;
 }
 
-// Lazy init of OpenAI Client
-let openaiInstance: OpenAI | null = null;
-function getOpenAIClient(apiKey: string): OpenAI {
-  if (!openaiInstance) {
-    openaiInstance = new OpenAI({
-      apiKey: apiKey,
-    });
-  }
-  return openaiInstance;
+function getOpenRouterModelId(modelId: string): string {
+  const mapping: Record<string, string> = {
+    "gemini-3.5-flash": "google/gemini-2.5-flash",
+    "gemini-3.1-flash-lite": "google/gemini-2.5-flash",
+    "gpt-4o": "openai/gpt-4o",
+    "gpt-4o-mini": "openai/gpt-4o-mini"
+  };
+  return mapping[modelId] || modelId;
 }
 
 export default async function handler(req: any, res: any) {
@@ -49,18 +47,13 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "参数不完整，缺少图像数据" });
     }
 
-    const isOpenAI = modelId && modelId.startsWith("gpt");
-    const targetModel = modelId || "gemini-3.5-flash";
+    const targetModel = modelId || "google/gemini-2.5-flash";
 
     // Select correct API Key
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
 
-    if (!isOpenAI && !geminiKey) {
-      return res.status(401).json({ error: "宇宙深处传来回音：请先在主控面板配置您的 GEMINI_API_KEY 密钥。" });
-    }
-    if (isOpenAI && !openaiKey) {
-      return res.status(401).json({ error: "宇宙深处传来回音：请先在主控面板配置您的 OPENAI_API_KEY 密钥。" });
+    if (!openrouterKey) {
+      return res.status(401).json({ error: "宇宙深处传来回音：请先在主控面板配置您的 OPENROUTER_API_KEY 密钥。" });
     }
 
     const handContext = handType === 'right' 
@@ -149,58 +142,35 @@ export default async function handler(req: any, res: any) {
 
     let resultText = "";
 
-    if (isOpenAI) {
-      const openai = getOpenAIClient(openaiKey!);
-      const response = await openai.chat.completions.create({
-        model: targetModel,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `${prompt}\n\n${
-                  focus && focus !== "全部" 
-                    ? `特别重点：用户目前非常渴求和关注【${focus}】。请在这个方向提供极为详尽、多维度的探讨，多花3倍以上的篇幅和细节为用户拨开尘雾。` 
-                    : ""
-                }`
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${base64Image}`,
-                }
-              }
-            ]
-          }
-        ],
-        max_tokens: 4096,
-      });
-      resultText = response.choices[0]?.message?.content || "";
-    } else {
-      const ai = getGeminiClient(geminiKey!);
-      const response = await ai.models.generateContent({
-        model: targetModel,
-        contents: {
-          parts: [
+    const openrouter = getOpenRouterClient(openrouterKey);
+    const openrouterModel = getOpenRouterModelId(targetModel);
+    
+    const response = await openrouter.chat.completions.create({
+      model: openrouterModel,
+      messages: [
+        {
+          role: "user",
+          content: [
             {
-              inlineData: {
-                data: base64Image,
-                mimeType: mimeType
-              }
-            },
-            {
+              type: "text",
               text: `${prompt}\n\n${
                 focus && focus !== "全部" 
                   ? `特别重点：用户目前非常渴求和关注【${focus}】。请在这个方向提供极为详尽、多维度的探讨，多花3倍以上的篇幅和细节为用户拨开尘雾。` 
                   : ""
               }`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              }
             }
           ]
         }
-      });
-      resultText = response.text || "";
-    }
+      ],
+      max_tokens: 4096,
+    });
+    resultText = response.choices[0]?.message?.content || "";
 
     return res.status(200).json({ output: resultText });
   } catch (error: any) {

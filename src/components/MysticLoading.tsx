@@ -4,18 +4,20 @@ import { Sparkles } from 'lucide-react';
 
 export default function MysticLoading() {
   // Generate random particles for the starfield effect
-  const particles = Array.from({ length: 35 }).map((_, i) => {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * 140 + 30; // Spread between 30 and 170
-    return {
-      id: i,
-      size: Math.random() * 3 + 1,
-      x: Math.cos(angle) * radius,
-      y: Math.sin(angle) * radius,
-      duration: Math.random() * 3 + 2,
-      delay: Math.random() * 2,
-    };
-  });
+  const particles = React.useMemo(() => {
+    return Array.from({ length: 35 }).map((_, i) => {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * 140 + 30; // Spread between 30 and 170
+      return {
+        id: i,
+        size: Math.random() * 3 + 1,
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+        duration: Math.random() * 3 + 2,
+        delay: Math.random() * 2,
+      };
+    });
+  }, []);
 
   return (
     <motion.div 

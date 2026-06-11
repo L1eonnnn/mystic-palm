@@ -18,39 +18,34 @@ const verificationCodes = new Map<string, { code: string; expires: number }>();
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
-// Lazy init of Gemini Client
-let aiInstance: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
+// Lazy init of OpenRouter Client
+let openrouterInstance: OpenAI | null = null;
+function getOpenRouterClient(): OpenAI {
+  if (!openrouterInstance) {
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      throw new Error("宇宙深处传来回音：请先在 AI Studio Build 的 Settings > Secrets 面板中配置您的 GEMINI_API_KEY 密钥。");
+      throw new Error("宇宙深处传来回音：请先在 AI Studio Build 的 Settings > Secrets 面板中配置您的 OPENROUTER_API_KEY 密钥。");
     }
-    aiInstance = new GoogleGenAI({
+    openrouterInstance = new OpenAI({
       apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
+      baseURL: "https://openrouter.ai/api/v1",
+      defaultHeaders: {
+        "HTTP-Referer": "https://ai.studio",
+        "X-Title": "MysticPalm AI",
       }
     });
   }
-  return aiInstance;
+  return openrouterInstance;
 }
 
-// Lazy init of OpenAI Client
-let openaiInstance: OpenAI | null = null;
-function getOpenAIClient(): OpenAI {
-  if (!openaiInstance) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("宇宙深处传来回音：请先在 AI Studio Build 的 Settings > Secrets 面板中配置您的 OPENAI_API_KEY 密钥。");
-    }
-    openaiInstance = new OpenAI({
-      apiKey: apiKey,
-    });
-  }
-  return openaiInstance;
+function getOpenRouterModelId(modelId: string): string {
+  const mapping: Record<string, string> = {
+    "gemini-3.5-flash": "google/gemini-2.5-flash",
+    "gemini-3.1-flash-lite": "google/gemini-2.5-flash",
+    "gpt-4o": "openai/gpt-4o",
+    "gpt-4o-mini": "openai/gpt-4o-mini"
+  };
+  return mapping[modelId] || modelId;
 }
 
 // API Route to generate and send verification code
@@ -178,8 +173,7 @@ app.post("/api/analyze-palm", async (req, res) => {
     }
 
     // Determine the model to use
-    const isOpenAI = modelId && modelId.startsWith("gpt");
-    const targetModel = modelId || "gemini-3.5-flash";
+    const targetModel = modelId || "google/gemini-2.5-flash";
 
     const handContext = handType === 'right' 
       ? '这是用户的右手，在传统手相学中代表后天运势、当下状态、自身的努力奋斗与近期的转变。' 
@@ -267,58 +261,35 @@ app.post("/api/analyze-palm", async (req, res) => {
 
     let resultText = "";
 
-    if (isOpenAI) {
-      const openai = getOpenAIClient();
-      const response = await openai.chat.completions.create({
-        model: targetModel,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `${prompt}\n\n${
-                  focus && focus !== "全部" 
-                    ? `特别重点：用户目前非常渴求和关注【${focus}】。请在这个方向提供极为详尽、多维度的探讨，多花3倍以上的篇幅和细节为用户拨开尘雾。` 
-                    : ""
-                }`
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${base64Image}`,
-                }
-              }
-            ]
-          }
-        ],
-        max_tokens: 4096,
-      });
-      resultText = response.choices[0]?.message?.content || "";
-    } else {
-      const ai = getGeminiClient();
-      const response = await ai.models.generateContent({
-        model: targetModel,
-        contents: {
-          parts: [
+    const openrouter = getOpenRouterClient();
+    const openrouterModel = getOpenRouterModelId(targetModel);
+    
+    const response = await openrouter.chat.completions.create({
+      model: openrouterModel,
+      messages: [
+        {
+          role: "user",
+          content: [
             {
-              inlineData: {
-                data: base64Image,
-                mimeType: mimeType
-              }
-            },
-            {
+              type: "text",
               text: `${prompt}\n\n${
                 focus && focus !== "全部" 
                   ? `特别重点：用户目前非常渴求和关注【${focus}】。请在这个方向提供极为详尽、多维度的探讨，多花3倍以上的篇幅和细节为用户拨开尘雾。` 
                   : ""
               }`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              }
             }
           ]
         }
-      });
-      resultText = response.text || "";
-    }
+      ],
+      max_tokens: 4096,
+    });
+    resultText = response.choices[0]?.message?.content || "";
 
     res.json({ output: resultText });
   } catch (error: any) {

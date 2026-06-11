@@ -7,12 +7,14 @@ interface ImageUploaderProps {
   onImageSelected: (base64: string, mimeType: string, modelId: string, handType: string) => void;
   isPlusSubscribed: boolean;
   onOpenUpgrade: () => void;
+  isLoggedIn: boolean;
+  onOpenLogin: () => void;
 }
 
-export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpenUpgrade }: ImageUploaderProps) {
+export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpenUpgrade, isLoggedIn, onOpenLogin }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState('gemini-3.5-flash');
+  const [selectedModel, setSelectedModel] = useState('google/gemini-2.5-flash');
   const [handType, setHandType] = useState('left');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,6 +30,11 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
   };
 
   const processFile = (file: File) => {
+    if (!isLoggedIn) {
+      onOpenLogin();
+      return;
+    }
+
     if (!file.type.startsWith('image/')) {
       alert('请上传图片文件。');
       return;
@@ -51,15 +58,40 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
     e.preventDefault();
     setIsDragging(false);
     
+    if (!isLoggedIn) {
+      onOpenLogin();
+      return;
+    }
+    
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       processFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isLoggedIn) {
+      onOpenLogin();
+      return;
+    }
     if (e.target.files && e.target.files.length > 0) {
       processFile(e.target.files[0]);
     }
+  };
+
+  const handleSelectAlbum = () => {
+    if (!isLoggedIn) {
+      onOpenLogin();
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const handleOpenCamera = () => {
+    if (!isLoggedIn) {
+      onOpenLogin();
+      return;
+    }
+    setIsCameraOpen(true);
   };
 
   const clearImage = () => {
@@ -71,45 +103,46 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="flex gap-4 mb-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gold-400 opacity-80 mb-2">选择模型</label>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label className="block text-xs sm:text-sm font-medium text-gold-400 opacity-80 mb-2">选择模型</label>
           <div className="relative">
             <select 
               value={selectedModel}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === 'gpt-4o' && !isPlusSubscribed) {
+                if (val === 'openai/gpt-4o' && !isPlusSubscribed) {
                   onOpenUpgrade();
                   return;
                 }
                 setSelectedModel(val);
               }}
-              className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
+              className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-2.5 pl-2.5 pr-7 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-gold-500/80 transition-components cursor-pointer"
             >
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash (免费版)</option>
-              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-              <option value="gpt-4o">{isPlusSubscribed ? '👑 GPT-4o (已解锁)' : '🔮 GPT-4o (Plus $6.9 专属)'}</option>
-              <option value="gpt-4o-mini">GPT-4o-mini</option>
+              <option value="google/gemini-2.1-flash-lite">Gemini Flash Lite</option>
+              <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+              <option value="openai/gpt-4o">{isPlusSubscribed ? '👑 GPT-4o 专业' : '🔮 GPT-4o (Plus会员)'}</option>
             </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-gold-500">
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
             </div>
           </div>
         </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gold-400 opacity-80 mb-2">手部类型</label>
+        <div>
+          <label className="block text-xs sm:text-sm font-medium text-gold-400 opacity-80 mb-2">手部类型</label>
           <div className="relative">
             <select 
               value={handType}
               onChange={(e) => setHandType(e.target.value)}
-              className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-3 px-4 pr-10 rounded-xl focus:outline-none focus:border-gold-500/80 transition-colors"
+              className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-2.5 pl-2.5 pr-7 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-gold-500/80 transition-components cursor-pointer"
             >
               <option value="left">左手 (先天命格)</option>
               <option value="right">右手 (后天运势)</option>
             </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gold-500">
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-gold-500">
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
             </div>
           </div>
         </div>
@@ -139,7 +172,7 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
             
             <div className="flex gap-4 w-full">
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={handleSelectAlbum}
                 className="flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Upload className="w-4 h-4" />
@@ -147,7 +180,7 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
               </button>
               
               <button
-                onClick={() => setIsCameraOpen(true)}
+                onClick={handleOpenCamera}
                 className="flex-1 py-3 px-4 bg-gold-500 hover:bg-gold-400 text-mystic-900 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Camera className="w-4 h-4" />

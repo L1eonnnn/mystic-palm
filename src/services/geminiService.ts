@@ -6,7 +6,7 @@ export async function analyzePalm(
   base64Image: string, 
   mimeType: string, 
   focus: string = '全部', 
-  modelId: string = 'gemini-3.5-flash', 
+  modelId: string = 'google/gemini-2.5-flash', 
   handType: string = 'left'
 ): Promise<string> {
   try {
