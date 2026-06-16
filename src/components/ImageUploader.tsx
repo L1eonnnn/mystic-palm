@@ -14,7 +14,8 @@ interface ImageUploaderProps {
 export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpenUpgrade, isLoggedIn, onOpenLogin }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState('google/gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState('google/gemini-2.5-flash:free');
+  const [customModelId, setCustomModelId] = useState('google/gemini-1.5-pro:free');
   const [handType, setHandType] = useState('left');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +41,7 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
       return;
     }
 
-    const reader = new FileReader();
+      const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
       setPreview(result);
@@ -111,7 +112,7 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
               value={selectedModel}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === 'openai/gpt-4o' && !isPlusSubscribed) {
+                if (val !== 'google/gemini-2.5-flash:free' && !isPlusSubscribed) {
                   onOpenUpgrade();
                   return;
                 }
@@ -119,11 +120,11 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
               }}
               className="w-full appearance-none bg-mystic-800/80 border border-gold-500/30 text-white font-medium py-2.5 pl-2.5 pr-7 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-gold-500/80 transition-components cursor-pointer"
             >
-              <option value="google/gemini-2.1-flash-lite">Gemini Flash Lite</option>
-              <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-              <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-              <option value="openai/gpt-4o">{isPlusSubscribed ? '👑 GPT-4o 专业' : '🔮 GPT-4o (Plus会员)'}</option>
+              <option value="google/gemini-2.5-flash:free">🆓 Gemini 2.5 Flash (免费/识图)</option>
+              <option value="google/gemini-3-pro-image">{isPlusSubscribed ? '👑 Gemini 3 Pro 专业/识图' : '🔮 Gemini 3 Pro (Plus会员/识图)'}</option>
+              <option value="openai/gpt-5.5">{isPlusSubscribed ? '👑 GPT-5.5 超级智能/识图' : '🔮 GPT-5.5 (Plus会员/识图)'}</option>
+              <option value="qwen/qwen3.7-plus">{isPlusSubscribed ? '👑 千问 Qwen 3.7 Plus 专业识图' : '🔮 千问 Qwen 3.7 Plus (Plus会员/识图)'}</option>
+              <option value="x-ai/grok-4.2-fast">{isPlusSubscribed ? '👑 Grok 4.2 Fast 极致解构' : '🔮 Grok 4.2 Fast (Plus会员/识图)'}</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-gold-500">
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
@@ -147,6 +148,7 @@ export default function ImageUploader({ onImageSelected, isPlusSubscribed, onOpe
           </div>
         </div>
       </div>
+
 
       {!preview ? (
         <motion.div

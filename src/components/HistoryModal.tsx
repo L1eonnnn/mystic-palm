@@ -44,6 +44,7 @@ export default function HistoryModal({ isOpen, onClose, onSelectRecord, userEmai
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          key="history-modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -86,9 +87,18 @@ export default function HistoryModal({ isOpen, onClose, onSelectRecord, userEmai
                         }}
                         className="bg-white/5 border border-white/10 hover:border-gold-500/50 rounded-xl p-4 flex gap-4 cursor-pointer transition-all hover:bg-white/10 group"
                       >
-                        <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-white/10 relative">
-                           <img src={record.imageSrc} alt="Palm" className="w-full h-full object-cover" />
-                           <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+                        <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-white/10 relative flex items-center justify-center bg-white/5">
+                           {record.imageSrc ? (
+                             <>
+                               <img src={record.imageSrc} alt="Palm" className="w-full h-full object-cover" />
+                               <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+                             </>
+                           ) : (
+                             <div className="text-gold-500/50 flex flex-col items-center justify-center text-[10px]">
+                               <Heart className="w-5 h-5 mb-1 animate-pulse" />
+                               <span>命运线迹</span>
+                             </div>
+                           )}
                         </div>
                         <div className="flex-1 flex flex-col justify-center">
                            <div className="flex items-center justify-between mb-2">

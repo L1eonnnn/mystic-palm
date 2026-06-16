@@ -11,6 +11,40 @@ import HistoryModal from './components/HistoryModal';
 import LoginModal from './components/LoginModal';
 import UpgradePage from './components/UpgradePage';
 
+// Helper function to compress input image base64 safely before storing to avoid QuotaExceededError in localStorage
+function compressImage(base64: string, mimeType: string, maxWidth = 500, maxHeight = 500): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth || height > maxHeight) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL(mimeType, 0.75));
+      } else {
+        resolve(`data:${mimeType};base64,${base64}`);
+      }
+    };
+    img.onerror = () => {
+      resolve(`data:${mimeType};base64,${base64}`);
+    };
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+}
+
 export default function App() {
   const [appState, setAppState] = useState<'idle' | 'loading' | 'result'>('idle');
   const [reading, setReading] = useState<string | null>(null);
@@ -22,7 +56,7 @@ export default function App() {
   const [isPlusSubscribed, setIsPlusSubscribed] = useState<boolean>(() => localStorage.getItem('isPlusSubscribed') === 'true');
   const [userEmail, setUserEmail] = useState<string | null>(() => localStorage.getItem('currentUserEmail'));
   const [currentImage, setCurrentImage] = useState<{base64: string, mimeType: string} | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<string>('google/gemini-2.5-flash');
+  const [selectedModelId, setSelectedModelId] = useState<string>('google/gemini-2.5-flash:free');
   const [selectedHandType, setSelectedHandType] = useState<string>('left');
 
   const handleLoginSuccess = (email: string) => {
@@ -46,18 +80,50 @@ export default function App() {
       setReading(result);
       setAppState('result');
       
-      // Save to history (dependent on current login status)
+      // Save to history (dependent on current login status) with compression to prevent QuotaExceededError
+      let compressedBase64 = `data:${mimeType};base64,${base64}`;
+      try {
+        compressedBase64 = await compressImage(base64, mimeType, 400, 400);
+      } catch (compressErr) {
+        console.warn("Image compression failed, using original size:", compressErr);
+      }
+
       const historyItem = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + '-' + Math.random().toString(36).substring(2, 9),
         date: new Date().toISOString(),
         handType,
         modelId,
         reading: result,
-        imageSrc: `data:${mimeType};base64,${base64}`
+        imageSrc: compressedBase64
       };
       const storageKey = userEmail ? `palm_history_${userEmail}` : 'palm_history';
       const existingHistory = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      localStorage.setItem(storageKey, JSON.stringify([historyItem, ...existingHistory]));
+      const newHistory = [historyItem, ...existingHistory];
+      
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(newHistory));
+      } catch (quotaError) {
+        console.warn("Storage quota exceeded even with compression. Trimming older records...", quotaError);
+        try {
+          // Fallback Strategy 1: Keep the new item, but strip images from ALL older history entries to free up space
+          const cleanHistory = [
+            historyItem,
+            ...existingHistory.map((item: any) => ({ ...item, imageSrc: "" }))
+          ];
+          localStorage.setItem(storageKey, JSON.stringify(cleanHistory));
+        } catch (secondError) {
+          // Fallback Strategy 2: Keep only the latest 4 text-only history entries
+          try {
+            const extraCleanHistory = [
+              historyItem,
+              ...existingHistory.slice(0, 4).map((item: any) => ({ ...item, imageSrc: "" }))
+            ];
+            localStorage.setItem(storageKey, JSON.stringify(extraCleanHistory));
+          } catch (thirdError) {
+            console.error("Local storage fully depleted. Storing history failed completely.", thirdError);
+          }
+        }
+      }
     } catch (err: any) {
       setError(err.message || "宇宙连接中断，请重试。");
       setAppState('idle');

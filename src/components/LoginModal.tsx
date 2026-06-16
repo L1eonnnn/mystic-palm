@@ -171,6 +171,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          key="login-modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -528,7 +529,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
       {/* OVERLAY: GOOGLE & FACEBOOK SOCIAL ACCOUNT INSTANT AUTH SIMULATORS */}
       <AnimatePresence>
         {socialPicker && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div key="social-picker-overlay" className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -610,7 +611,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginMod
       {/* OVERLAY: PRIVACY & USER TERM FULL CONTRACT VIEWER */}
       <AnimatePresence>
         {activePolicy && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div key="active-policy-overlay" className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}

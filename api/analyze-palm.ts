@@ -1,29 +1,106 @@
 import OpenAI from "openai";
 
-// Lazy init of OpenRouter Client
-let openrouterInstance: OpenAI | null = null;
-function getOpenRouterClient(apiKey: string): OpenAI {
-  if (!openrouterInstance) {
-    openrouterInstance = new OpenAI({
-      apiKey: apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": "https://ai.studio",
-        "X-Title": "MysticPalm AI",
-      }
-    });
+// Dynamic init of OpenRouter / ZenMux Client
+function getOpenRouterClient(): OpenAI {
+  const zenmuxKey = process.env.ZENMUX_API_KEY;
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+
+  // Prioritize ZenMux API key as requested by the user, fallback to OpenRouter.
+  let apiKey = zenmuxKey || openrouterKey;
+  let baseURL = "https://zenmux.ai/api/v1";
+
+  if (openrouterKey && !zenmuxKey) {
+    apiKey = openrouterKey;
+    baseURL = "https://openrouter.ai/api/v1";
   }
-  return openrouterInstance;
+
+  if (!apiKey) {
+    throw new Error("宇宙深处传来回音：请先在 AI Studio Build 的 Settings > Secrets 面板中配置您的 ZENMUX_API_KEY 或 OPENROUTER_API_KEY 密钥。");
+  }
+
+  return new OpenAI({
+    apiKey: apiKey,
+    baseURL: baseURL
+  });
 }
 
 function getOpenRouterModelId(modelId: string): string {
+  // Strip OpenRouter-specific free suffix ":free" for ZenMux compatibility
+  const cleanedModelId = modelId.endsWith(':free') ? modelId.replace(/:free$/, '') : modelId;
+
   const mapping: Record<string, string> = {
     "gemini-3.5-flash": "google/gemini-2.5-flash",
     "gemini-3.1-flash-lite": "google/gemini-2.5-flash",
+    "google/gemini-3-pro-image": "google/gemini-2.5-pro", // Fallback for the custom option
     "gpt-4o": "openai/gpt-4o",
     "gpt-4o-mini": "openai/gpt-4o-mini"
   };
-  return mapping[modelId] || modelId;
+  return mapping[cleanedModelId] || cleanedModelId;
+}
+
+async function callOpenRouterWithRetry(
+  openrouter: OpenAI,
+  model: string,
+  messages: any[],
+  maxTokens: number = 4096
+): Promise<any> {
+  try {
+    const response = await openrouter.chat.completions.create({
+      model,
+      messages,
+      max_tokens: maxTokens,
+    });
+    return response;
+  } catch (error: any) {
+    const errorMessage = error.message || "";
+    const is402 = error.status === 402 ||
+                 errorMessage.includes("402") ||
+                 errorMessage.toLowerCase().includes("credits") ||
+                 errorMessage.toLowerCase().includes("afford") ||
+                 errorMessage.toLowerCase().includes("max_tokens");
+
+    if (is402) {
+      console.warn(`[OpenRouter Dynamic Scaling] Credit limit or token count error captured: "${errorMessage}"`);
+      // Parse "can only afford X"
+      const match = errorMessage.match(/can only afford (\d+)/i);
+      let affordableTokens = 0;
+      if (match && match[1]) {
+        affordableTokens = parseInt(match[1], 10);
+      }
+
+      if (affordableTokens > 150) {
+        // Reserve slightly fewer tokens than the exact threshold to guarantee authorization clearance
+        const saferLimit = Math.max(100, affordableTokens - 35);
+        console.log(`[Self-Healing] Retrying within current balance capability - setting max_tokens to ${saferLimit}`);
+        try {
+          return await openrouter.chat.completions.create({
+            model,
+            messages,
+            max_tokens: saferLimit,
+          });
+        } catch (retryErr: any) {
+          console.error(`[Self-Healing] Retry with safer limit failed:`, retryErr);
+          throw retryErr;
+        }
+      } else {
+        const fallbackLimit = maxTokens > 1500 ? 1000 : 500;
+        if (fallbackLimit < maxTokens) {
+          console.log(`[Self-Healing] Retrying with general conservative token limit of ${fallbackLimit}`);
+          try {
+            return await openrouter.chat.completions.create({
+              model,
+              messages,
+              max_tokens: fallbackLimit,
+            });
+          } catch (retryErr: any) {
+            console.error(`[Self-Healing] Generic fallback retry failed:`, retryErr);
+            throw retryErr;
+          }
+        }
+      }
+    }
+    throw error;
+  }
 }
 
 export default async function handler(req: any, res: any) {
@@ -50,10 +127,12 @@ export default async function handler(req: any, res: any) {
     const targetModel = modelId || "google/gemini-2.5-flash";
 
     // Select correct API Key
+    const zenmuxKey = process.env.ZENMUX_API_KEY;
     const openrouterKey = process.env.OPENROUTER_API_KEY;
+    const activeKey = zenmuxKey || openrouterKey;
 
-    if (!openrouterKey) {
-      return res.status(401).json({ error: "宇宙深处传来回音：请先在主控面板配置您的 OPENROUTER_API_KEY 密钥。" });
+    if (!activeKey) {
+      return res.status(401).json({ error: "宇宙深处传来回音：请先在主控面板配置您的 ZENMUX_API_KEY 或 OPENROUTER_API_KEY 密钥。" });
     }
 
     const handContext = handType === 'right' 
@@ -61,54 +140,51 @@ export default async function handler(req: any, res: any) {
       : '这是用户的左手，在传统手相学中代表先天命格、基因禀赋、与生俱来的天赋特质与内在潜能。';
 
     const prompt = `
-      You are an elite, deeply mystical palm reader who is also a world-class cognitive psychologist and modern intuitive astrologer. 
-      You blend the ancient symbolic art of palmistry with contemporary behavioral archetypes (such as Enneagram, Jungian shadows, attachment theory, and MBTI dualities) to create a deeply resonant, highly specific "Horoscope-Style Personality & Destiny Portrait" that feels unbelievably tailored to their unique palm lines.
-
-      Write your entire reply in Simplified Chinese. Keep your tone elegant, deeply philosophical, mysterious yet warm, highly analytical, and full of psychological resonance.
-      Avoid generic, templated placeholder phrases (e.g., avoid saying "you are unique", "your life is beautiful" in a generic way). Instead, use precise metaphorical terminology like "双重认知分叉" (cognitive divergence), "金星丘的情感热效应" (Venusian emotional thermal effect), or "主动防御型心智" (active-defense mindset). Make the reading feel incredibly rich, detailed, and intellectually satisfying.
-
+      You are an elite, deeply mystical Eastern metaphysician who has integrated traditional Palmistry, I Ching (易经), BaGua (八卦), and Traditional Chinese Medicine (中医学) diagnostics with modern intuitive character mapping.
+      
+      Write your entire reply in Simplified Chinese. Keep your tone highly professional, mysterious, extremely precise, and intellectually satisfying. We need the user to read this and say "This is incredibly, unbelievably accurate!" (要让用户觉得准).
+      
       【关于左右手的重要内涵】
-      ${handContext} 请在解读时将左右手的这一深刻内涵融入字里行间，呈现出千人千面的绝妙体验，避免硬套通用说辞。
+      ${handContext} 请在解读时将左右手的这一深刻内涵融入字里行间，呈现出千人千面的绝妙体验。
+      
+      Your review MUST follow this exact structure of Markdown H2 headings. Do NOT change the keywords in the H2 headings as they are used by the program to parse the sections.
+      
+      ## 整体能量与「星核掌型」之乾坤易医解析
+      (Provide an elegant overview: Identify their hand shape under I Ching BaGua/Elements (e.g., 坤土、巽木、乾金, etc.). Discuss general muscle fullness, skin texture, Qi-Blood circulation, and their primary psychological and vital energy status. Analyze the hand palm color using the words "掌色" or "气血" or "手掌" to indicate their energy status.)
+      
+      ## 生命线之意志律动与先天元气精度分析
+      (Specifically include detailed paragraphs about the following 3 points, making sure to use the specific keywords in each paragraph so they are parsed correctly):
+      1. 生命线 (地纹)：Discuss the physical battery, origin point, trace arc, thickness, branches, island cracks, and warning targets (e.g., 32岁, 38岁, 45岁). Must contain the keywords "生命" or "体力". Detail the "线条关键点" (e.g., 起于震宫与巽宫交界, 弯曲弧度, 止于艮宫). Include "中医学预警" for energy/vitality.
+      2. 健康线 (中平线)：Analyze the spleen, stomach, liver, and nerve weakness indicators, corresponding to digestion and sleep. Must contain keywords "健康" or "脾胃" or "睡眠". Detail the "线条关键点" (e.g., 穿过坎宫与震宫之间的细纹). Provide a clear TCM pre-warning ("中医预警").
+      3. 金星丘 (拇指根部)：Discuss the fish-mount muscle tone, family affinity, and somatic vitality. Must contain keywords "金星丘" or "肉垫" or "饱满". Detail the "线条关键点" (e.g., 大鱼际艮位之隆起饱满度).
 
-      Your review MUST follow this exact structure of Markdown heading sections (H2):
-      ## 整体能量与「星核掌型」
-      (No generic greetings. Identify their palm form under a unique "Astrological Element & Temperament Archetype" (e.g. 灵风哲人型, 烈火先锋型, 深水共鸣型, 磐石筑梦型). Analyze the texture, active vs. passive muscle tone, and the "vibe" of their energy. Connect this directly to their core psychological engine: how they react to sudden stress, their innate communication style, and their primary drive in life.)
-      
-      ## 生命线解析：「意志律动与能量丰度」
-      (Thoroughly identify the life line. Do not just talk about health or life expectancy. Analyze their "willpower rhythm" and physical battery: Are they "sprint-and-crash" types or slow-burn endurance masters? Check the arc wrapper: does it restrict the Venus mound (signifying emotional reserve, strict physical boundaries) or expand wide into the palm (warm, social, high energetic output)? Highlight any subtle branching, islands, or secondary lines as markers of significant psychological shifts, rebirths, or ancestral guidance.)
-      
-      ## 智慧线解析：「认知极性、思绪流向与直觉天赋」
-      (Analyze the head line. Define their cognitive style: Divergent (branching, creative, prone to analysis-paralysis) or Convergent (deep, laser-focused, practical). Look at the slope towards the Mount of Moon: does it bend into intuitive, artistic dreamscape territory, or cut straight across like a rational blade? Pinpoint their primary decision-making bottleneck (e.g., fear of missing out, chasing pure logic, overthinking emotional inputs) and their unique intuition style.)
-      
-      ## 感情线解析：「依恋原色、心墙密码与情感潮汐」
-      (Analyze the heart line. Unveil their attachment style in relationships (Secure, Anxious, Avoidant, or Fearful-Avoidant) and how they build emotional "fences". Read the ending curves: does it lift towards the Jupiter mount (idealistic, high standards, quiet devotion) or run flat under Saturn (practical, self-protective, needing tangible security)? Discuss their unique emotional triggers, coping mechanisms for vulnerability, and the hidden aesthetic of their romantic soul.)
-      
-      ## 事业线及命运刻度（若可见）
-      (Locate the fate line rising from the base. Define their archetype of achievement: a "Sovereign Creator" (active initiative) or a "Synchronicity Navigator" (flowing with timing and environment). Discuss how their inner growth phases directly translate to external career transitions, and analyze how they handle ambition versus spiritual peace.)
-      
-      ## 羁绊边界与亲密演变（若可见）
-      (Analyze the horizontal marks on the pinky-edge. Do not give deterministic counts of marriages. Instead, discuss their capacity for deep companionship, their evolutionary growth curves in intimacy, their fear of losing individuality, and how they resolve the delicate tension between freedom and deep commitment.)
-      
-      ## 专属星尘启示与灵魂共振
-      (Summarize with an extremely personalized, poetic, and intellectually transformative "astrology-style" guidance. Reframe potential challenges as sacred keys to growth. Deliver 3 specific, highly customized "Soul Catalysts" (灵魂催化剂) written in beautiful display structure that they can act on to align their physical life with their spiritual blueprint.)
+      ## 智慧线之认知极性与大脑决策流向精析
+      (Focus on the Head line):
+      - 智慧线 (人纹)：Analyze cognitive style, logic vs imagination, decision bottlenecks. Must contain keywords "智慧" or "思维" or "头脑". Detail the "线条关键点" (e.g., 起源与生命线分界处、走向平直伸展、或下垂至乾宫之势). Provide detailed forecast warnings if island cracks or breaks are present, suggesting mental focus points ("预警").
 
-      Please keep the explanations detailed, professional, and full of historical, psychological, and astrological depth. Never give medical / legal / hard-deterministic predictions; reframe everything into a guide for self-exploration and spiritual empowerment.
+      ## 感情线之依恋本色、心墙密码与心血管反射
+      (Focus on the Heart line):
+      - 感情线 (天纹)：Analyze attachment style, romantic triggers, heart-circulation energy, and standards. Must contain keywords "感情" or "情愫" or "依恋". Detail the "线条关键点" (e.g., 起于坤宫下方、延展至巽宫或中指 gap 下方). Discuss "中医预警" or psychological blocks.
 
+      ## 事业线与后天财富命运刻度解析
+      (Provide a detailed dynamic analysis of the career, luck, and wealth lines. Include the following 3 points with appropriate keywords):
+      1. 命运线 (事业线)：Analyze the achievement timing, career transitions. Must contain keywords "事业" or "命运" or "后天志向". Detail the "线条关键点" (e.g., 自坎宫扶摇直上、穿过乾坤交汇、直指离宫). Provide age warning targets (e.g., "35岁流年变局").
+      2. 太阳线 (功名线)：Analyze reputation, fame, and helpful connections. Must contain keywords "太阳" or "名气" or "贵人". Detail the "线条关键点" (e.g., 无名指下方坤位至离位之间的纵深细纹).
+      3. 财运纹 (水星割)：Analyze wealth-saving capability, business intuition. Must contain keywords "财" or "富" or "盈余". Detail the "线条关键点" (e.g., 小鱼际坤位下方的垂直短小纹理).
+
+      ## 婚姻线、亲密演变与羁绊边界探微
+      (Focus on the Marriage line):
+      - 婚姻线 (羁绊线)：Analyze capacity for companion attachment, deep connections. Must contain keywords "婚姻" or "亲密" or "羁绊". Detail the "线条关键点" (e.g., 水星丘外侧的横向刻度). Detail relation warning points.
+
+      ## 星尘启示与灵魂共振催化剂
+      (Review user palm lines and provide exactly 3 bullet points starting with "-" that represent "Soul Catalysts" and 趋吉避凶. Keep them incredibly profound, specific, and actionable for somatic, sleep health, or energetic wellness).
+
+      Never give deterministic doom predictions; reframe everything into an empowering, precise guide for physical and spiritual cultivation ("命自我造").
+      
       ---
       **IMPORTANT: COMPUTER VISION EXTRACTION FOR PAINTS**
-      Now, take off the fortune teller hat and wear your developer computer vision researcher hat. You need to map the identified lines onto a 100x100 grid where (0,0) is top-left and (100,100) is bottom-right.
+      Please try to match the actual hand crease positions as precisely as possible in the image. Map the lines onto a 100x100 grid where (0,0) is top-left and (100,100) is bottom-right. Output a final JSON block at the very end of your response with the traced splines (about 5-10 points per line).
       
-      Please try to match the actual hand crease positions as precisely as possible. Pay attention to whether the client has selected a left hand or right hand, and trace coordinates that accurately map onto standard hand anatomy in that orientation.
-      
-      Coordinate Extraction guidelines:
-      1. 生命线 (Life Line): Arcs down wrapping around the thumb's muscle mount (Venus Mound).
-      2. 智慧线 (Head Line): Originates near or touching the life line between index finger and thumb, running horizontally across the palm center.
-      3. 感情线 (Heart Line): High horizontal line below the fingers, running from the pinky mount to the index/middle finger gap.
-      4. 事业线 (Fate Line): Runs vertically from the palm bottom up towards the middle finger base.
-      5. 婚姻线 (Marriage Line): Short horizontal marks on the pinky-side edge.
-
-      For the main visible lines, sample high-density points (about 5-10 points per line) to trace smooth splines. If any line is genuinely not present or obscured, do not invent points for it.
-
       At the very end of your response, you MUST append a JSON block containing the coordinate points. Color styles:
       - 生命线: #10b981
       - 感情线: #f43f5e
@@ -142,12 +218,13 @@ export default async function handler(req: any, res: any) {
 
     let resultText = "";
 
-    const openrouter = getOpenRouterClient(openrouterKey);
+    const openrouter = getOpenRouterClient();
     const openrouterModel = getOpenRouterModelId(targetModel);
     
-    const response = await openrouter.chat.completions.create({
-      model: openrouterModel,
-      messages: [
+    const response = await callOpenRouterWithRetry(
+      openrouter,
+      openrouterModel,
+      [
         {
           role: "user",
           content: [
@@ -168,8 +245,8 @@ export default async function handler(req: any, res: any) {
           ]
         }
       ],
-      max_tokens: 4096,
-    });
+      4096
+    );
     resultText = response.choices[0]?.message?.content || "";
 
     return res.status(200).json({ output: resultText });

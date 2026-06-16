@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Check, Sparkles, Shield, CreditCard, 
   User, Flame, Moon, Compass, Lock, Zap, HelpCircle, 
-  ChevronRight, ArrowLeft, Globe, Laptop
+  ChevronRight, ArrowLeft, Globe, Laptop, Settings, Link2, ExternalLink, Info
 } from 'lucide-react';
 
 interface UpgradePageProps {
@@ -15,11 +15,30 @@ interface UpgradePageProps {
 
 export default function UpgradePage({ isOpen, onClose, onUpgradeSuccess, isUnlocked }: UpgradePageProps) {
   const [step, setStep] = useState<'pricing' | 'pay' | 'success'>('pricing');
-  const [payMethod, setPayMethod] = useState<'card' | 'alipay' | 'wechat'>('card');
+  const [payMethod, setPayMethod] = useState<'card' | 'alipay' | 'wechat' | 'creem'>('creem');
+  const [creemUrl, setCreemUrl] = useState(() => {
+    return localStorage.getItem('creem_payment_url') || (import.meta.env.VITE_CREEM_PAYMENT_URL) || 'https://www.creem.io/test/payment/prod_4gRaqY7tJRWVfNl4aaWHLk';
+  });
+  const [inputUrl, setInputUrl] = useState(creemUrl);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  
   const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
   const [cardExpiry, setCardExpiry] = useState('12/28');
   const [cardCvc, setCardCvc] = useState('123');
   const [loading, setLoading] = useState(false);
+
+  const handleSaveCreemUrl = (url: string) => {
+    let cleanUrl = url.trim();
+    if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+    setCreemUrl(cleanUrl);
+    setInputUrl(cleanUrl);
+    localStorage.setItem('creem_payment_url', cleanUrl);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2000);
+  };
 
   const handleSimulatePayment = () => {
     setLoading(true);
@@ -30,14 +49,14 @@ export default function UpgradePage({ isOpen, onClose, onUpgradeSuccess, isUnloc
     }, 1500);
   };
 
-  if (!isOpen) return null;
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+      {isOpen && (
+        <motion.div
+          key="upgrade-page-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/90 backdrop-blur-md flex flex-col min-h-screen text-slate-800"
       >
         {/* Simulated Browser URL bar to satisfy "二级域名" request with premium aesthetic */}
@@ -305,56 +324,168 @@ export default function UpgradePage({ isOpen, onClose, onUpgradeSuccess, isUnloc
                 </div>
 
                 {/* Simulated payment options */}
-                <div className="grid grid-cols-3 gap-2.5 mb-6">
+                <div className="grid grid-cols-4 gap-1.5 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod('creem')}
+                    className={`p-2 py-3 rounded-xl border-2 text-center transition-all cursor-pointer flex flex-col justify-between items-center h-[72px] ${
+                      payMethod === 'creem' 
+                        ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700' 
+                        : 'border-slate-150 hover:bg-slate-50 text-slate-500'
+                    }`}
+                  >
+                    <span className="text-[8px] font-extrabold uppercase tracking-widest bg-indigo-600 text-white px-1 py-0.5 rounded-sm">官方</span>
+                    <span className="text-[10.5px] font-black block leading-none mt-1">Creem 极速</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setPayMethod('card')}
-                    className={`p-3.5 rounded-xl border-2 text-center transition-all cursor-pointer ${
+                    className={`p-2 py-3 rounded-xl border-2 text-center transition-all cursor-pointer flex flex-col justify-between items-center h-[72px] ${
                       payMethod === 'card' 
                         ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700' 
                         : 'border-slate-150 hover:bg-slate-50 text-slate-500'
                     }`}
                   >
-                    <CreditCard className="w-4 h-4 mx-auto mb-1.5" />
-                    <span className="text-[11px] font-bold block">双币卡/Visa</span>
+                    <CreditCard className="w-4 h-4 mx-auto text-slate-400" />
+                    <span className="text-[10.5px] font-bold block leading-none">模拟双币卡</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setPayMethod('alipay')}
-                    className={`p-3.5 rounded-xl border-2 text-center transition-all cursor-pointer ${
+                    className={`p-2 py-3 rounded-xl border-2 text-center transition-all cursor-pointer flex flex-col justify-between items-center h-[72px] ${
                       payMethod === 'alipay' 
                         ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700' 
                         : 'border-slate-150 hover:bg-slate-50 text-slate-500'
                     }`}
                   >
-                    <div className="w-18 mx-auto font-black text-blue-500 italic text-[11px] mb-1">支付宝</div>
-                    <span className="text-[11px] font-bold block mt-3">Alipay</span>
+                    <div className="mx-auto font-black text-blue-500 italic text-[11px]">支</div>
+                    <span className="text-[10.5px] font-bold block leading-none">模拟支付宝</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setPayMethod('wechat')}
-                    className={`p-3.5 rounded-xl border-2 text-center transition-all cursor-pointer ${
+                    className={`p-2 py-3 rounded-xl border-2 text-center transition-all cursor-pointer flex flex-col justify-between items-center h-[72px] ${
                       payMethod === 'wechat' 
                         ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700' 
                         : 'border-slate-150 hover:bg-slate-50 text-slate-500'
                     }`}
                   >
-                    <div className="w-18 mx-auto font-black text-emerald-500 font-sans text-[11px] mb-1">微信</div>
-                    <span className="text-[11px] font-bold block mt-3">WeChat</span>
+                    <div className="mx-auto font-black text-emerald-500 text-[11px]">微</div>
+                    <span className="text-[10.5px] font-bold block leading-none">模拟微信</span>
                   </button>
                 </div>
 
                 <div className="space-y-4">
-                  {payMethod === 'card' ? (
+                  {payMethod === 'creem' ? (
+                    <div className="space-y-3">
+                      <div className="p-4 bg-slate-950 text-white rounded-2xl border border-slate-800 shadow-md">
+                        <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black tracking-wider text-indigo-400 font-sans">
+                              CREEM OFFICIAL
+                            </span>
+                            <span className="bg-emerald-500/10 text-emerald-400 text-[8px] px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
+                              REAL Live
+                            </span>
+                          </div>
+                          <Globe className="w-3.5 h-3.5 text-slate-500" />
+                        </div>
+                        
+                        <p className="text-[10.5px] text-slate-300 leading-relaxed">
+                          接入 **Leo store** 境外快捷支付通道。支持全球 Visa/Mastercard、Apple Pay 和 PayPal 付款。
+                        </p>
+                        
+                        <div className="mt-3 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => window.open(creemUrl, '_blank', 'noreferrer,noopener')}
+                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-[0.98] cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>去 Creem 极速安全支付 ($6.9)</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={handleSimulatePayment}
+                            className="w-full py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-indigo-300 hover:text-white font-medium text-[10px] rounded-lg transition-all"
+                          >
+                            ✨ 支付已完成？立即手动激活同步权益
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Configurable checkout link panel */}
+                      <div className="border border-slate-150 bg-slate-50 rounded-2xl overflow-hidden transition-all">
+                        <button
+                          type="button"
+                          onClick={() => setIsConfigOpen(!isConfigOpen)}
+                          className="w-full px-4 py-2.5 flex items-center justify-between text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100/65 hover:bg-slate-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-1 text-slate-700">
+                            <Settings className="w-3.5 h-3.5 text-indigo-500 animate-spin-slow" />
+                            <span>上架与更换您的 Creem 支付链接 ⚙️</span>
+                          </div>
+                          <span className="text-[10px] text-indigo-600 hover:underline">
+                            {isConfigOpen ? '收起配置' : '展开上架说明'}
+                          </span>
+                        </button>
+                        
+                        {isConfigOpen && (
+                          <div className="p-3.5 bg-white border-t border-slate-150 space-y-3">
+                            <div className="text-[11px] text-slate-500 space-y-1 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100/30">
+                              <p className="font-bold text-slate-800 flex items-center gap-1">
+                                <Info className="w-3 h-3 text-indigo-500" />
+                                3步轻松完成上架：
+                              </p>
+                              <p className="text-[10px] leading-relaxed text-slate-600">
+                                1. 登录您的 <strong>Creem 商家后台</strong> (如截图 <em>Leo store</em>)。<br/>
+                                2. 点击左侧菜单 <strong>「产品」 (Products)</strong>，创建或点击您的 Plus 套餐 ($6.9 USD)。<br/>
+                                3. 复制生成的 <strong>Checkout Link (支付链接)</strong> 并粘贴到下方保存！
+                              </p>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-500 block">自定义 Creem 支付 URL</label>
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="text"
+                                  placeholder="https://creem.io/c/leostore..."
+                                  value={inputUrl}
+                                  onChange={(e) => setInputUrl(e.target.value)}
+                                  className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveCreemUrl(inputUrl)}
+                                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer"
+                                >
+                                  保存配置
+                                </button>
+                              </div>
+                              {saveSuccess && (
+                                <p className="text-[10px] text-emerald-600 font-bold animate-pulse mt-1">
+                                  ✓ 恭喜！Leo store 的 Creem 支付链接已实时上架！
+                                </p>
+                              )}
+                              <p className="text-[9px] text-slate-400 leading-tight">
+                                提示：在 <code>.env.example</code> 中定义 <code>VITE_CREEM_PAYMENT_URL</code> 变量可预置默认链接。
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : payMethod === 'card' ? (
                     <>
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1.5">卡号</label>
                         <div className="relative">
                           <input
-                            type="text"
-                            value={cardNumber}
-                            onChange={(e) => setCardNumber(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs font-mono focus:ring-2 focus:ring-indigo-500/15 focus:outline-none"
+                             type="text"
+                             value={cardNumber}
+                             onChange={(e) => setCardNumber(e.target.value)}
+                             className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs font-mono focus:ring-2 focus:ring-indigo-500/15 focus:outline-none"
                           />
                           <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2" />
                         </div>
@@ -413,12 +544,14 @@ export default function UpgradePage({ isOpen, onClose, onUpgradeSuccess, isUnloc
 
                   <button
                     type="button"
-                    onClick={handleSimulatePayment}
+                    onClick={payMethod === 'creem' ? () => window.open(creemUrl, '_blank', 'noreferrer,noopener') : handleSimulatePayment}
                     disabled={loading}
-                    className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                   >
                     {loading ? (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : payMethod === 'creem' ? (
+                      <span className="flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" /> 去 Creem 支付 ＆ 开启限额</span>
                     ) : (
                       <span>立即安全支付 $6.9 USD</span>
                     )}
@@ -474,6 +607,7 @@ export default function UpgradePage({ isOpen, onClose, onUpgradeSuccess, isUnloc
 
         </div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }

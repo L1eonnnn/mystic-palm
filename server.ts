@@ -18,34 +18,107 @@ const verificationCodes = new Map<string, { code: string; expires: number }>();
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
-// Lazy init of OpenRouter Client
-let openrouterInstance: OpenAI | null = null;
+// Dynamic init of OpenRouter / ZenMux Client
 function getOpenRouterClient(): OpenAI {
-  if (!openrouterInstance) {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      throw new Error("宇宙深处传来回音：请先在 AI Studio Build 的 Settings > Secrets 面板中配置您的 OPENROUTER_API_KEY 密钥。");
-    }
-    openrouterInstance = new OpenAI({
-      apiKey: apiKey,
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": "https://ai.studio",
-        "X-Title": "MysticPalm AI",
-      }
-    });
+  const zenmuxKey = process.env.ZENMUX_API_KEY;
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+
+  // Prioritize ZenMux API key as requested by the user, fallback to OpenRouter.
+  let apiKey = zenmuxKey || openrouterKey;
+  let baseURL = "https://zenmux.ai/api/v1";
+
+  if (openrouterKey && !zenmuxKey) {
+    apiKey = openrouterKey;
+    baseURL = "https://openrouter.ai/api/v1";
   }
-  return openrouterInstance;
+
+  if (!apiKey) {
+    throw new Error("宇宙深处传来回音：请先在 AI Studio Build 的 Settings > Secrets 面板中配置您的 ZENMUX_API_KEY 或 OPENROUTER_API_KEY 密钥。");
+  }
+
+  return new OpenAI({
+    apiKey: apiKey,
+    baseURL: baseURL
+  });
 }
 
 function getOpenRouterModelId(modelId: string): string {
+  // Strip OpenRouter-specific free suffix ":free" for ZenMux compatibility
+  const cleanedModelId = modelId.endsWith(':free') ? modelId.replace(/:free$/, '') : modelId;
+
   const mapping: Record<string, string> = {
     "gemini-3.5-flash": "google/gemini-2.5-flash",
     "gemini-3.1-flash-lite": "google/gemini-2.5-flash",
+    "google/gemini-3-pro-image": "google/gemini-2.5-pro", // Fallback for the custom option
     "gpt-4o": "openai/gpt-4o",
     "gpt-4o-mini": "openai/gpt-4o-mini"
   };
-  return mapping[modelId] || modelId;
+  return mapping[cleanedModelId] || cleanedModelId;
+}
+
+async function callOpenRouterWithRetry(
+  openrouter: OpenAI,
+  model: string,
+  messages: any[],
+  maxTokens: number = 4096
+): Promise<any> {
+  try {
+    const response = await openrouter.chat.completions.create({
+      model,
+      messages,
+      max_tokens: maxTokens,
+    });
+    return response;
+  } catch (error: any) {
+    const errorMessage = error.message || "";
+    const is402 = error.status === 402 ||
+                 errorMessage.includes("402") ||
+                 errorMessage.toLowerCase().includes("credits") ||
+                 errorMessage.toLowerCase().includes("afford") ||
+                 errorMessage.toLowerCase().includes("max_tokens");
+
+    if (is402) {
+      console.warn(`[OpenRouter Dynamic Scaling] Credit limit or token count error captured on server: "${errorMessage}"`);
+      // Parse "can only afford X"
+      const match = errorMessage.match(/can only afford (\d+)/i);
+      let affordableTokens = 0;
+      if (match && match[1]) {
+        affordableTokens = parseInt(match[1], 10);
+      }
+
+      if (affordableTokens > 150) {
+        // Reserve slightly fewer tokens than the exact threshold to guarantee authorization clearance
+        const saferLimit = Math.max(100, affordableTokens - 35);
+        console.log(`[Self-Healing] Retrying within current balance capability on server - setting max_tokens to ${saferLimit}`);
+        try {
+          return await openrouter.chat.completions.create({
+            model,
+            messages,
+            max_tokens: saferLimit,
+          });
+        } catch (retryErr: any) {
+          console.error(`[Self-Healing] Server-side retry with safer limit failed:`, retryErr);
+          throw retryErr;
+        }
+      } else {
+        const fallbackLimit = maxTokens > 1500 ? 1000 : 500;
+        if (fallbackLimit < maxTokens) {
+          console.log(`[Self-Healing] Retrying on server with general conservative token limit of ${fallbackLimit}`);
+          try {
+            return await openrouter.chat.completions.create({
+              model,
+              messages,
+              max_tokens: fallbackLimit,
+            });
+          } catch (retryErr: any) {
+            console.error(`[Self-Healing] Server-side generic fallback retry failed:`, retryErr);
+            throw retryErr;
+          }
+        }
+      }
+    }
+    throw error;
+  }
 }
 
 // API Route to generate and send verification code
@@ -264,9 +337,10 @@ app.post("/api/analyze-palm", async (req, res) => {
     const openrouter = getOpenRouterClient();
     const openrouterModel = getOpenRouterModelId(targetModel);
     
-    const response = await openrouter.chat.completions.create({
-      model: openrouterModel,
-      messages: [
+    const response = await callOpenRouterWithRetry(
+      openrouter,
+      openrouterModel,
+      [
         {
           role: "user",
           content: [
@@ -287,14 +361,126 @@ app.post("/api/analyze-palm", async (req, res) => {
           ]
         }
       ],
-      max_tokens: 4096,
-    });
+      4096
+    );
     resultText = response.choices[0]?.message?.content || "";
 
     res.json({ output: resultText });
   } catch (error: any) {
     console.error("Palm API Error:", error);
     res.status(500).json({ error: error.message || "宇宙网络出现神秘震荡，请稍后重试" });
+  }
+});
+
+// REST route for image generation matching the serverless equivalent
+app.post("/api/generate-image", async (req, res) => {
+  try {
+    const { prompt, model, aspectRatio, style, lighting, camera, shotType } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: "咒语Prompt不能为空哦。" });
+    }
+
+    // Construct enhanced prompt
+    let fullPrompt = prompt;
+    const details = [];
+    if (style && style !== 'none') details.push(`${style}`);
+    if (lighting && lighting !== 'none') details.push(`${lighting} lighting`);
+    if (camera && camera !== 'none') details.push(`captured with ${camera}`);
+    if (shotType && shotType !== 'none') details.push(`${shotType} shot`);
+    
+    if (details.length > 0) {
+      fullPrompt = `${prompt}, ${details.join(', ')}`;
+    }
+
+    const zenmuxKey = process.env.ZENMUX_API_KEY;
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = zenmuxKey || openrouterKey;
+    let imageBaseUrl = "https://zenmux.ai/api/v1/images/generations";
+
+    if (openrouterKey && !zenmuxKey) {
+      imageBaseUrl = "https://openrouter.ai/api/v1/images/generations";
+    }
+    
+    // If user specified an OpenRouter model and apiKey exists, attempt native OpenRouter call
+    if (apiKey && model && model !== 'fallback') {
+      try {
+        console.log(`[Express Image] Generating via OpenRouter/ZenMux model: ${model}`);
+        const response = await fetch(imageBaseUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: fullPrompt,
+            model: model,
+          }),
+        });
+
+        if (response.ok) {
+          const data: any = await response.json();
+          const imageUrl = data.data?.[0]?.url || data.images?.[0];
+          if (imageUrl) {
+            return res.json({ success: true, url: imageUrl, source: model });
+          }
+        } else {
+          const errorText = await response.text();
+          console.warn(`[Express Image] OpenRouter returned status ${response.status}:`, errorText);
+        }
+      } catch (orError) {
+        console.warn("[Express Image] Failed during OpenRouter fetching, using celestial fallback:", orError);
+      }
+    }
+
+    // High fidelity, free direct rendering fallback via Pollinations AI.
+    // Extremely fast and gorgeous, guarantees success even without an API Key or during network failures.
+    const styleMap: Record<string, string> = {
+      "ideogram": "detailed graphic vector illustration, beautiful typography matching high contrast",
+      "recraft": "flat design vector style, gorgeous clean illustrations, 2d style",
+      "flux": "hyperrealistic 8K photorealistic concept digital masterpiece, high-fidelity fine art",
+      "midjourney": "highly photorealistic celestial fantasy concept art, stardust, breathtaking volumetric lighting cinematics",
+      "stable-diffusion": "classical oil canvas master painting, dynamic light interplay and epic composition"
+    };
+
+    let mappedStyle = "breathtaking celestial fantasy concept painting, cosmic stardust, fine-art masterpiece";
+    const modelLower = (model || "").toLowerCase();
+    for (const [key, val] of Object.entries(styleMap)) {
+      if (modelLower.includes(key)) {
+        mappedStyle = val;
+        break;
+      }
+    }
+
+    const randomSeed = Math.floor(Math.random() * 1000000);
+    // Combine with aspect constraints
+    let width = 1024;
+    let height = 1024;
+    if (aspectRatio === "16:9") {
+      width = 1024;
+      height = 576;
+    } else if (aspectRatio === "9:16") {
+      width = 576;
+      height = 1024;
+    } else if (aspectRatio === "4:3") {
+      width = 1024;
+      height = 768;
+    } else if (aspectRatio === "2:3") {
+      width = 768;
+      height = 1152;
+    }
+
+    const pollinationUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt + ", " + mappedStyle)}?width=${width}&height=${height}&seed=${randomSeed}&enhance=true&nologo=true`;
+
+    return res.json({
+      success: true,
+      url: pollinationUrl,
+      source: "Celestial Flow Pipeline"
+    });
+
+  } catch (error: any) {
+    console.error("General Handler Error in Express Image Generator API:", error);
+    res.status(500).json({ error: error.message || "命运刻蚀出错，无法唤醒画布" });
   }
 });
 
